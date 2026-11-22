@@ -1,5 +1,5 @@
 use crate::shared::{
-    grid::{Grid},
+    grid::Grid,
     types::{Path, Point2, VehicleState},
 };
 
@@ -26,7 +26,7 @@ fn get_h(goal: (usize, usize), cell: (usize, usize)) -> usize {
 
 /*returns the neighbors of a given cell in a grid as a vector of cells,
 but also checks if the cell is valid and not obstructed*/
-fn get_neighbors(cell: (i64, i64), map: &Grid, clearance: f64) -> Vec<(usize, usize)>{
+fn get_neighbors(cell: (i64, i64), map: &Grid, clearance: f64) -> Vec<(usize, usize)> {
     let mut neighbors: Vec<(usize, usize)> = Vec::new();
     let candidates = [
         (cell.0 + 1, cell.1),
@@ -39,19 +39,20 @@ fn get_neighbors(cell: (i64, i64), map: &Grid, clearance: f64) -> Vec<(usize, us
         (cell.0 - 1, cell.1 + 1),
     ];
 
-    let Some(current) = map.center(cell.0 as usize, cell.1 as usize) else { return Vec::new(); };
+    let Some(current) = map.center(cell.0 as usize, cell.1 as usize) else {
+        return Vec::new();
+    };
 
     for &(col, row) in &candidates {
         //leave threshold as None for now to get default 128, later add as parameter
         //think this has potential to be wrong, not sure if point w/ actual global coords cell/grid coords is supposed to be used
-        if row < 0 || col < 0{
+        if row < 0 || col < 0 {
             continue;
         }
-        let Some(point) = map.center(col as usize, row as usize) else { continue; };
-        if map.clear(
-            point,
-            clearance,
-        ) && map.segment_clear(current, point, clearance){
+        let Some(point) = map.center(col as usize, row as usize) else {
+            continue;
+        };
+        if map.clear(point, clearance) && map.segment_clear(current, point, clearance) {
             neighbors.push((col as usize, row as usize));
         }
     }
@@ -113,7 +114,7 @@ impl Planner {
         //f = h+g, we have h, need distance from the start, which should be 0
         opened.push(Reverse(Node {
             f: 0,
-            cell: (start_cell.0 as usize, start_cell.1 as usize),
+            cell: (start_cell.0, start_cell.1),
             g: 0,
         }));
 
@@ -123,10 +124,14 @@ impl Planner {
             //push the neighbors in the grid, but in every direction, so should be like 8 neighs for each, and then check if valid
             //need to somehow add space to hold the running cost for g at each cell, would get from one of the lookup maps, maybe the cheapest_found
             let current = opened.pop()?;
-            if closed.contains(&current.0.cell){
+            if closed.contains(&current.0.cell) {
                 continue;
             }
-            if map.center(current.0.cell.0, current.0.cell.1)?.distance(goal) <= goal_tolerance_m {
+            if map
+                .center(current.0.cell.0, current.0.cell.1)?
+                .distance(goal)
+                <= goal_tolerance_m
+            {
                 let mut path: Path = Path::new();
                 let mut path_current = current.0.cell;
                 //these asterisks need to be taken a look at
@@ -141,24 +146,26 @@ impl Planner {
                 return Some(path);
             }
             closed.insert(current.0.cell);
-            let neighbors: Vec<(usize, usize)> = get_neighbors((current.0.cell.0 as i64, current.0.cell.1 as i64), map, clearance_m);
+            let neighbors: Vec<(usize, usize)> = get_neighbors(
+                (current.0.cell.0 as i64, current.0.cell.1 as i64),
+                map,
+                clearance_m,
+            );
             let current_g = current.0.g;
             for &neighbor in &neighbors {
                 let new_g = current_g + local_directional_cost(current.0.cell, neighbor);
                 let stored_cost = cheapest_found.get(&neighbor).copied().unwrap_or(usize::MAX);
-                if new_g < stored_cost{
+                if new_g < stored_cost {
                     cheapest_found.insert(neighbor, new_g);
-                    if !closed.contains(&neighbor){
-                    came_from.insert(neighbor, current.0.cell);
-                    opened.push(Reverse(Node {
-                        f: get_h(goal_cell, neighbor)
-                            + new_g,
-                        cell: neighbor,
-                        g: new_g,
-                    }));
+                    if !closed.contains(&neighbor) {
+                        came_from.insert(neighbor, current.0.cell);
+                        opened.push(Reverse(Node {
+                            f: get_h(goal_cell, neighbor) + new_g,
+                            cell: neighbor,
+                            g: new_g,
+                        }));
+                    }
                 }
-                }                    
-                
             }
         }
         None
